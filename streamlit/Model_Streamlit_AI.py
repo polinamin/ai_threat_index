@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import difflib
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 #def local_css(file_name):
 #    with open(file_name) as f:
@@ -25,26 +26,54 @@ def get_base64(bin_file):
         data = f.read()
     return base64.b64encode(data).decode()
 
+def set_background(jpeg_file):
+    bin_str = get_base64(jpeg_file)
+    page_bg_img = '''
+    <style>
+    .stApp {
+    background-image: url("data:image/jpeg;base64,%s");
+    background-size: cover;
+    background-repeat:no-repeat;
+    #margin-top: 200px;
+    }
+    </style> 
+    '''% bin_str
+
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+    return
+set_background("../Images/blurry_background.jpeg")
+
+
 model = joblib.load(open('../pickles/Model.pkl','rb'))
 km_tools = joblib.load(open('../pickles/Km_tools.pkl','rb'))
 tools = joblib.load(open('../pickles/tools.pkl','rb'))
-skills = joblib.load(open('../pickles/skills.pkl','rb'))
+skills = joblib.load(open('../pickles/skills_f.pkl','rb'))
+industrycols = joblib.load(open('../pickles/industry_cols.pkl','rb'))
+km_industry = joblib.load(open('../pickles/km_industries.pkl','rb'))
+industry = joblib.load(open('../pickles/industry.pkl','rb'))
+km_skills = joblib.load(open('../pickles/Km_skills.pkl','rb'))
+
+
+
 X = joblib.load(open('../pickles/Xfull.pkl','rb'))
 
 st.title("Protect your career from AI threat")
 
 st.subheader('What jobs can help you lower AI threat to your career?')
 
-st.markdown(
-    "Please fill in the fields below, to learn: 1/ how your job is impacted by AI. 2/ similar jobs you can consider, in case you want to lower risk from AI. Please be sure you separate entries by commas."
-)
+multi='''Please fill in the fields below, to learn: 
+1/ how your job is impacted by AI. 
+2/ similar jobs you can consider, in case you want to lower risk from AI.
+Please be sure you separate entries by commas.'''
 
 text_jobs = st.text_area('Identify the job(s) you are interested in pursuing: ').strip()
 text_tasks = st.text_area('Identify the task(s) you are energized to perform as part of your job: ').strip()
 text_tools = st.text_area('Identify the tool(s) you have experience using: ').strip()
 text_skills = st.multiselect('Select the skill(s) you are excited to leverage: ', skills.columns, 
                            placeholder="Select your skills...", max_selections=5)
-st.write(text_skills)
+#st.write(text_skills)
+text_industry = st.multiselect('Indicate the industry or industries where you would like to work: ', industrycols, 
+                           placeholder="Select your industry...", max_selections=1)
 
 
 #def text_process(text):
@@ -106,11 +135,68 @@ for i in range(len(tools_list)):
         Xstreamlit_tools.loc["match",k] = tools_list[i]
         Xstreamlit_tools.loc["fuzzy_match",k] = k[0]
 
-cluster = km_tools.predict(Xstreamlit_tools.head(1))[0]
+cluster_tool = km_tools.predict(Xstreamlit_tools.head(1))[0]
 tools["cluster"]= km_tools.labels_
-top_tools_jobs = pd.DataFrame(tools[tools["cluster"]==cluster].head(3).index).values
+top_tools_jobs = pd.DataFrame(tools[tools["cluster"]==cluster_tool].head(3).index).values
 
 if text_tools == "":
   st.write("")
 else:
   st.write(f"The top 3 jobs based on the tools you enjoy using are: {top_tools_jobs}")
+
+
+#Clusters
+#Industries
+Xstreamlit_industries = pd.DataFrame(columns = industrycols, index=["input", "match", "fuzzy_match"])
+Xstreamlit_industries.fillna(0, inplace=True)
+industry_list = list(text_industry)
+
+for i in range(len(industry_list)):
+    j = industry_list[i]
+    if len(difflib.get_close_matches(j,Xstreamlit_industries.columns)) != 0:
+        k = difflib.get_close_matches(j,Xstreamlit_industries.columns, cutoff=0.8)[0]
+        Xstreamlit_industries.loc["input",k] = 1
+        Xstreamlit_industries.loc["match",k] = text_industry
+        Xstreamlit_industries.loc["fuzzy_match",k] = k[0]
+
+cluster_industry = km_industry.predict(Xstreamlit_industries.head(1))[0]
+industry["cluster"]= km_industry.labels_
+top_industry_jobs = pd.DataFrame(industry[industry["cluster"]==cluster_industry]["Title"]).head(3).values
+
+if len(industry_list)== 0:
+  st.write("")
+else:
+  st.write(f"The top 3 jobs based on the industry you are interested in are: {top_industry_jobs}")
+
+#Clusters
+#Skills
+Xstreamlit_skills = pd.DataFrame(columns = skills.columns, index=["input", "match", "fuzzy_match"])
+Xstreamlit_skills.fillna(0, inplace=True)
+skills_list = text_skills
+
+for i in range(len(skills_list)):
+    j = skills_list[i]
+    if len(difflib.get_close_matches(j,Xstreamlit_skills.columns)) != 0:
+        k = difflib.get_close_matches(j,Xstreamlit_skills.columns, cutoff=0.8)[0]
+        Xstreamlit_skills.loc["input",k] = 35 #maximum score possible for skill proficiency
+        Xstreamlit_skills.loc["match",k] = text_skills
+        Xstreamlit_skills.loc["fuzzy_match",k] = k[0]
+
+cluster_skills = km_skills.predict(Xstreamlit_skills.head(1))[0]
+skills["cluster"]= km_skills.labels_
+top_skills_jobs = pd.DataFrame(skills[skills["cluster"]==cluster_skills]["Title"]).head(3).values
+
+if len(skills_list_list)== 0:
+  st.write("")
+else:
+  st.write(f"The top 3 jobs based on the skills you are excited to leverage: ")
+
+AgGrid(
+    top_skills_jobs,
+    gridOptions=GridOptionsBuilder.from_dataframe(top_skills_jobs).build(),
+)
+
+#filtered = full_dataset_combined_analysis[full_dataset_combined_analysis['Task'].str.contains("conduct research")]
+#filtered.groupby("rank_new")["Title"].apply(np.unique)
+#basic_lookup_in_occupations_index = full_dataset_combined_analysis[full_dataset_combined_analysis["Title"].str.contains("Adhesive Bonding Machine")]
+#basic_lookup_in_occupations_index
