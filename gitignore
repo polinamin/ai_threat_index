@@ -4,5 +4,5 @@
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
 # User-specific files
-*./pickles/imputer.pkl
-*./pickles/tools_.pkl
+/pickles/imputer.pkl
+/pickles/tools_.pkl
